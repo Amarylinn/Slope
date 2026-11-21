@@ -1,0 +1,376 @@
+================================================================================
+      TolSlope v2.0 — Analisis Stabilitas Lereng Timbunan Jalan Tol
+        Dokumentasi Lengkap: Rumus, Asal Data, dan Penggunaan
+================================================================================
+
+Tanggal dibuat: 21 November 2026
+Versi: 2.0 (Redesign UI Profesional)
+Bahasa: Python (Streamlit)
+File utama: app.py
+Dependensi: requirements.txt
+
+================================================================================
+  DESKRIPSI APLIKASI
+================================================================================
+
+TolSlope v2.0 adalah aplikasi web berbasis Streamlit untuk menganalisis
+stabilitas lereng timbunan jalan tol di atas tanah dasar berlapis (lunak,
+lempung, keras) menggunakan metode keseimbangan batas:
+  1. Metode Fellenius (Ordinary Method of Slices, 1927)
+  2. Metode Bishop Disederhanakan (Simplified Bishop Method, 1955)
+
+Fitur utama:
+  • Antarmuka modern dengan tema cerah profesional (clean daylight theme)
+  • 5 tab: Stabilitas, Sensitivitas, Animasi, Rumus & Teori, Asal Data
+  • Ekspor Excel lengkap (5 sheet: Ringkasan, Irisan, Sensitivitas, Penampang,
+    Referensi Rumus) dengan conditional formatting, rumus Excel hidup, dan
+    keterangan asal data pada setiap parameter
+  • Ekspor DXF/CAD lengkap (9 layer: timbunan, tanah dasar, bidang longsor,
+    teks, dimensi, grid, irisan, pusat, batas lapisan) dengan hatch, dimensi
+    anotasi, dan title block lengkap
+  • Animasi interaktif pencarian lingkaran kritis dan simulasi longsor
+  • Pelacakan asal data (data traceability) untuk setiap parameter
+
+================================================================================
+  CARA MENJALANKAN
+================================================================================
+
+A. Lokal:
+   1. Install dependensi:  pip install -r requirements.txt
+   2. Jalankan:            streamlit run app.py
+   3. Buka di browser:     http://localhost:8501
+
+B. Deploy (Streamlit Cloud):
+   1. Upload app.py dan requirements.txt ke GitHub
+   2. Buka https://share.streamlit.io
+   3. Hubungkan repository, pilih app.py sebagai file utama
+   4. Deploy
+
+================================================================================
+  DASAR TEORI & RUMUS
+================================================================================
+
+A. METODE FELLENIUS (Ordinary Method of Slices, 1927)
+------------------------------------------------------
+Prinsip: Keseimbangan momen terhadap pusat lingkaran.
+         Gaya antar-irisan (normal dan geser) diabaikan.
+
+Rumus Faktor Keamanan:
+
+  FS = Σ[c·b/cos α + (W·cos α − u·b/cos α)·tan φ] / Σ(W·sin α)
+
+Dimana:
+  FS    = Faktor keamanan (tanpa satuan)
+  W     = Berat total irisan (kN/m)
+  b     = Lebar horizontal irisan (m)
+  α     = Sudut kemiringan dasar irisan terhadap horizontal (°)
+  c     = Kohesi efektif c' atau kohesi tak terdrainase cu (kPa)
+  φ     = Sudut geser efektif φ' atau 0° untuk analisis tak terdrainase (°)
+  u     = Tekanan air pori pada dasar irisan (kPa)
+  l     = Panjang busur dasar irisan = b/cos α (m)
+
+Pembilang = Gaya penahan (resisting force)
+Penyebut  = Gaya penggerak (driving force)
+
+Kelebihan:  Sederhana, tanpa iterasi, selalu konvergen.
+Kekurangan: Konservatif (FS terlalu rendah 10–60%), tidak memenuhi
+            keseimbangan gaya horizontal.
+
+Referensi: Fellenius, W. (1927). Erdstatische Berechnungen mit Reibung
+           und Kohäsion.
+
+
+B. METODE BISHOP DISEDERHANAKAN (Simplified Bishop, 1955)
+------------------------------------------------------------
+Prinsip: Keseimbangan momen + gaya vertikal.
+         Gaya geser antar-irisan diabaikan, gaya normal dipertahankan.
+         Iteratif (FS muncul di kedua sisi persamaan).
+
+Rumus Faktor Keamanan:
+
+  FS = Σ[(c·b + (W − u·b)·tan φ) / mα] / Σ(W·sin α)
+
+Faktor koreksi mα:
+
+  mα = cos α + (sin α · tan φ) / FS
+
+Proses iterasi:
+  1. Tebak FS awal (dari Fellenius)
+  2. Hitung mα untuk setiap irisan menggunakan FS tebakan
+  3. Hitung FS baru dari rumus utama
+  4. Cek konvergensi: |FS_baru − FS_lama| ≤ 0.00001
+  5. Ulangi langkah 2-4 sampai konvergen (biasanya 3-10 iterasi)
+
+Kelebihan:  Lebih akurat (dalam 5% dari metode rigorous), standar industri.
+Kekurangan: Memerlukan iterasi, dapat divergen pada kasus ekstrem.
+
+Referensi: Bishop, A.W. (1955). The use of the slip circle in the
+           stability analysis of slopes. Géotechnique, 5(1), 7-17.
+
+
+C. RASIO TEKANAN AIR PORI (ru)
+--------------------------------
+Definisi:
+  ru = u / (γ · z)
+
+Dimana:
+  ru    = Rasio tekanan air pori (tanpa satuan, 0 s.d. 0.5)
+  u     = Tekanan air pori (kPa)
+  γ     = Berat isi total tanah (kN/m³)
+  z     = Kedalaman di bawah permukaan tanah (m)
+
+Implementasi dalam aplikasi:
+  u·b = ru × W_tanah (tekanan air pori × lebar irisan)
+
+Rentang nilai:
+  ru = 0     → Tanah kering (tidak ada tekanan air pori)
+  ru = 0.3   → Muka air tanah sedang
+  ru = 0.5   → Tanah jenuh penuh, aliran sejajar lereng
+
+Referensi: Bishop, A.W. dan Morgenstern, N. (1960). Stability coefficients
+           for earth slopes. Géotechnique, 10(4), 129-153.
+
+
+D. VARIABEL IRISAN (Method of Slices)
+---------------------------------------
+1. W (kN/m) — Berat irisan
+   Rumus: W = γ_timbunan × h_timbunan × b
+              + Σ(γ_lapisan × h_lapisan_dalam_irisan × b)
+              + q × b  (bila irisan di bawah beban lalu lintas)
+
+   Asal: γ dari input pengguna (uji laboratorium)
+         h dari geometri (tinggi dari permukaan ke bidang longsor)
+         b = (xb − xa) / jumlah irisan
+
+2. α (°) — Sudut dasar irisan
+   Rumus: sin α = (xc − x_tengah) / R
+   Dimana xc = koordinat x pusat lingkaran, R = jari-jari
+
+   Asal: Geometri lingkaran kritis (hasil pencarian)
+
+   Konvensi tanda: positif bila irisan di sebelah hulu (driving),
+                   negatif di dekat kaki lereng.
+
+3. b (m) — Lebar irisan
+   Rumus: b = (xb − xa) / n, dimana n = jumlah irisan (50 default)
+   Asal: Pembagian merata bidang longsor
+
+4. c (kPa) — Kohesi
+   Nilai: c' (efektif) atau cu (tak terdrainase)
+   Asal: Input pengguna → data uji triaksial atau geser langsung
+   Penetapan per irisan: berdasarkan jenis tanah di DASAR irisan
+         (tanah timbunan atau lapisan tanah dasar tertentu)
+
+5. φ (°) — Sudut geser
+   Nilai: φ' (efektif) atau 0° (analisis UU)
+   Asal: Input pengguna → data uji triaksial
+   Penetapan per irisan: sama dengan c, berdasarkan tanah di dasar irisan
+
+6. u (kPa) — Tekanan air pori
+   Rumus: u = ru × γ × z
+   Asal: ru dari input pengguna
+
+
+E. KRITERIA FAKTOR KEAMANAN (SNI 8460:2017)
+----------------------------------------------
+Berdasarkan SNI 8460:2017 — Persyaratan Perancangan Geoteknik:
+
+  +------------------------------------------+------------------+
+  | Kondisi                                  | FS Minimum       |
+  +------------------------------------------+------------------+
+  | Jangka panjang, statis                   | FS ≥ 1,50        |
+  | Jangka pendek (akhir konstruksi)         | FS ≥ 1,30        |
+  | Kondisi gempa (pseudo-statis)            | FS ≥ 1,10        |
+  +------------------------------------------+------------------+
+
+Catatan:
+  - FS juga tergantung pada matriks risiko (konsekuensi kegagalan ×
+    tingkat ketidakpastian):
+    • Risiko rendah + ketidakpastian rendah: FS ≥ 1,25
+    • Risiko rendah + ketidakpastian tinggi: FS ≥ 1,50
+    • Risiko tinggi + ketidakpastian rendah: FS ≥ 1,50
+    • Risiko tinggi + ketidakpastian tinggi: FS > 1,50
+  - Cek Pasal 9 Tabel 22-25 SNI 8460:2017 untuk kriteria lengkap.
+
+================================================================================
+  ASAL DATA — PELACAKAN (DATA TRACEABILITY)
+================================================================================
+
+Setiap parameter dalam analisis memiliki asal yang jelas:
+
+┌──────────────────────┬─────────────────────┬──────────────────────────┐
+│ Parameter            │ Asal Data           │ Cara Menentukan          │
+├──────────────────────┼─────────────────────┼──────────────────────────┤
+│ H (tinggi timbunan)  │ Input pengguna      │ Desain geometri jalan    │
+│ B (lebar puncak)     │ Input pengguna      │ Desain lebar badan jalan │
+│ m (kemiringan)       │ Input pengguna      │ Desain lereng            │
+│ γ_timbunan           │ Input pengguna      │ Uji lab / tipikal        │
+│ c' timbunan          │ Input pengguna      │ Uji triaksial / geser    │
+│ φ' timbunan          │ Input pengguna      │ Uji triaksial            │
+│ q (beban lalin)      │ Input pengguna      │ Standar beban jalan      │
+│ ru (rasio air pori)  │ Input pengguna      │ Estimasi / piezometer    │
+│ Tebal lapisan tanah  │ Input pengguna      │ Data bor tanah           │
+│ γ, c, φ tanah dasar  │ Input pengguna      │ Uji lab tanah            │
+│ FS syarat            │ Input pengguna      │ SNI 8460:2017            │
+├──────────────────────┼─────────────────────┼──────────────────────────┤
+│ FS Bishop            │ Hasil perhitungan   │ Iterasi Bishop           │
+│ FS Fellenius         │ Hasil perhitungan   │ Rumus Fellenius          │
+│ Pusat lingkaran      │ Hasil pencarian     │ Grid search + refinement │
+│ Jari-jari R          │ Hasil pencarian     │ Variasi ybot             │
+│ Data irisan (W,α,c)  │ Hasil perhitungan   │ Per irisan dari geometri │
+│ Sensitivitas         │ Hasil perhitungan   │ Variasi parameter m      │
+└──────────────────────┴─────────────────────┴──────────────────────────┘
+
+Keterangan warna di Excel:
+  • Kuning (FFFFDD) = Sel data masukan pengguna
+  • Hijau  (E8F5E9) = Sel hasil perhitungan
+  • Biru   (huruf)  = Data masukan
+  • Hitam  (huruf)  = Hasil atau rumus
+
+================================================================================
+  DETAIL OUTPUT EXCEL (5 SHEET)
+================================================================================
+
+SHEET 1: RINGKASAN
+  - Hasil analisis (FS Bishop, FS Fellenius, status, selisih)
+  - Data masukan timbunan, beban, air pori (dengan keterangan asal)
+  - Data masukan tanah dasar per lapisan (dengan rumus kedalaman otomatis)
+  - Bidang longsor kritis (pusat, jari-jari, titik masuk/keluar)
+  - Rumus yang digunakan (Fellenius & Bishop lengkap)
+  - Catatan dan disclaimer
+  - Conditional formatting: hijau=memenuhi, merah=tidak memenuhi
+
+SHEET 2: IRISAN
+  - Tabel lengkap per irisan (x tengah, b, W, α, c, φ, W sin α, c·b, (W-ub)tanφ)
+  - Kolom tambahan untuk komponen penahan
+  - Rumus tiap variabel irisan di bawah tabel
+  - Total (Σ) di baris terakhir
+  - Freeze panes dan print title
+
+SHEET 3: SENSITIVITAS
+  - FS Bishop untuk lereng 1:1.0 sampai 1:4.0
+  - Grafik garis FS vs kemiringan
+  - Status (memenuhi/tidak) per kemiringan
+  - Conditional formatting warna
+  - Lereng paling curam yang memenuhi (rumus INDEX/MATCH)
+
+SHEET 4: PENAMPANG
+  - Gambar penampang dan bidang longsor kritis (PNG resolusi tinggi)
+  - Diskalakan agar optimal saat dicetak
+
+SHEET 5: REFERENSI RUMUS
+  - Dokumentasi lengkap rumus Fellenius dan Bishop
+  - Penjelasan variabel irisan
+  - Rasio tekanan air pori
+  - Kriteria FS dari SNI 8460:2017
+
+================================================================================
+  DETAIL OUTPUT DXF/CAD (9 LAYER)
+================================================================================
+
+Layer yang tersedia di file DXF:
+  1. TOL_TIMBUNAN       — Geometri timbunan + hatch
+  2. TOL_TANAH_DASAR    — Batas lapisan tanah dasar
+  3. TOL_BIDANG_LONGSOR — Busur bidang longsor kritis (tebal)
+  4. TOL_TEKS           — Label, parameter, title block
+  5. TOL_DIMENSI        — Garis dimensi (H, m·H)
+  6. TOL_GRID           — Grid referensi (titik-titik)
+  7. TOL_IRISAN         — Garis irisan (20 irisan)
+  8. TOL_PUSAT          — Pusat lingkaran + jari-jari
+  9. TOL_BATAS_LAPISAN  — Batas antar lapisan tanah (garis putus)
+
+Konten tambahan di DXF:
+  - Title block: FS Bishop, FS Fellenius, pusat, R, parameter timbunan
+  - Hatch pattern pada timbunan (ANSI31)
+  - Garis dimensi H dan m·H dengan label
+  - Label per lapisan (nama, tebal, γ, c, φ)
+  - Garis putus jari-jari ke titik masuk dan keluar
+  - Tanggal dan metode di header
+
+================================================================================
+  PERBEDAAN DARI VERSI SEBELUMNYA (v1.0 → v2.0)
+================================================================================
+
+UI/UX:
+  ✅ Tema cerah profesional (bright daylight theme) yang bersih, tajam, dan elegan
+  ✅ Card-based layout untuk metric dan informasi
+  ✅ Status badge berwarna (hijau/kuning/merah)
+  ✅ Data origin tags (Input Pengguna / Perhitungan / Referensi)
+  ✅ Tab baru: "Rumus & Teori" dan "Asal Data"
+  ✅ Help tooltip pada setiap input
+  ✅ Footer informatif
+
+Analisis:
+  ✅ Sensitivitas ditambah kemiringan 1:1.0
+  ✅ Kolom tambahan di tabel irisan (c·b, (W-ub)tanφ)
+  ✅ Penjelasan rumus per variabel irisan
+
+Output Excel:
+  ✅ Sheet baru: "Referensi Rumus" (dokumentasi lengkap)
+  ✅ Kolom "Asal Data" di setiap parameter
+  ✅ Kolom "Keterangan" dengan penjelasan lengkap
+  ✅ Warna sel: kuning=input, hijau=hasil
+  ✅ Kolom tambahan di irisan (c·b, (W-ub)tanφ)
+  ✅ FS ditampilkan 3 desimal
+  ✅ Emoji status (✅/❌)
+
+Output DXF/CAD:
+  ✅ 9 layer (sebelumnya 4)
+  ✅ Hatch pattern pada timbunan
+  ✅ Garis dimensi H dan m·H
+  ✅ Grid referensi
+  ✅ 20 garis irisan
+  ✅ Garis jari-jari ke titik masuk/keluar
+  ✅ Label lengkap per lapisan (nama, tebal, γ, c, φ)
+  ✅ Title block dengan tanggal dan metode
+
+================================================================================
+  BATASAN DAN DISCLAIMER
+================================================================================
+
+1. Bidang longsor diasumsikan LINGKARAN (bukan non-lingkaran/planar)
+2. Belum memodelkan:
+   - Beban gempa (pseudo-statis / dinamis)
+   - Muka air tanah rinci (piezometrik)
+   - Perkuatan (geotekstil, PVD, bored pile)
+   - Konsolidasi bertahap
+   - Bidang longsor non-lingkaran
+   - Efek 3D (analisis 2D saja)
+3. Muka air tanah disederhanakan dengan rasio tekanan air pori (ru)
+4. Hasil BUKAN PENGGANTI analisis perangkat lunak geoteknik profesional:
+   - Slide (Rocscience)
+   - GeoStudio (Seequent)
+   - Plaxis (Bentley)
+5. Gunakan untuk studi awal, perbandingan, atau keperluan edukasi
+
+================================================================================
+  REFERENSI
+================================================================================
+
+1. Fellenius, W. (1927). Erdstatische Berechnungen mit Reibung und Kohäsion.
+   Ernst & Sohn, Berlin.
+
+2. Bishop, A.W. (1955). The use of the slip circle in the stability analysis
+   of slopes. Géotechnique, 5(1), 7-17.
+
+3. Bishop, A.W. dan Morgenstern, N. (1960). Stability coefficients for earth
+   slopes. Géotechnique, 10(4), 129-153.
+
+4. SNI 8460:2017 — Persyaratan Perancangan Geoteknik.
+   Badan Standardisasi Nasional (BSN), Jakarta.
+
+5. Das, B.M. (2010). Principles of Geotechnical Engineering. 7th Ed.
+   Cengage Learning.
+
+6. Abramson, L.W., Lee, T.S., Sharma, S., dan Boyce, G.M. (2002). Slope
+   Stability and Stabilization Methods. 2nd Ed. John Wiley & Sons.
+
+================================================================================
+  KONTAK & LISENSI
+================================================================================
+
+Aplikasi ini dibuat untuk keperluan akademik dan edukasi.
+Mata kuliah: Aplikasi Komputer
+Topik: Analisis Stabilitas Lereng Timbunan Jalan Tol
+
+================================================================================
